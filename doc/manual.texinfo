@@ -1,0 +1,42 @@
+\input texinfo
+@setfilename manual.texinfo
+@settitle CL-Sails Manual
+
+@copying
+Copyright @copyright{} 2009 Red Daly
+@end copying
+
+@titlepage
+@title CL-Sails Manual
+
+@c The following two commands start the copyright page.
+@page
+@vskip 0pt plus 1filll
+@insertcopying
+@end titlepage
+
+@c Output the table of contents at the beginning.
+@contents
+
+@ifnottex
+
+@node Top
+@top CL-Sails
+@insertcopying
+@end ifnottex
+     
+@chapter Introduction
+Graphical user interfaces are important and designing them is difficult.  Making GUIs is
+far more difficult than it needs to be.  There should be little time between conception of a GUI
+and an implementation that is at least superficially functional.
+
+When creating GUIs for
+web-based applications, developers have many options for tools, languages, and approaches to GUI
+design.  A web-based GUI can use any mix of HTML, Javascript, CSS, Flash, Java, etc.  Picking
+which technologies to use and how to use them with one another affects the whole application
+from front-end nuances to back-end architecture.
+
+CL-Sails is one attempt to simplify the creation of web-based GUIs.  It allows you to write
+a component is HTML with a few special 
+
+@bye

@@ -1,0 +1,338 @@
+;;;;   Sails is a way to generate dynamic components for web pages, often called 'widgets'
+;;;;   in other systems.  Sails uses the Model-View-Controller software design pattern
+;;;;   The sails infrastructure is lightweight, only providing common methods
+;;;;   for manipulating HTML components.  These common features are the abilities to:
+;;;;      *insert raw HTML from a component into a document (see MANIFEST-SAIL, )
+;;;;      *include other components within a component
+;;;;      *assign names to significant HTML elements within the component (e.g. title, author-link)
+
+(in-package :sails)
+
+;   to describe components, and is a system comparable to the dojo framework without
+;   trying to be everything to everybody.
+
+; Sails currently uses Parenscript and the Parenscript Object System to represent sail
+; objects.
+
+(defclass sails-document (event-emitter)
+  ((focus :accessor saildoc-focus :initform nil))
+  (:documentation "For stuff."))
+
+(defclass standard-sail ()
+  ((view :initarg :view :accessor sail-view)
+   (sub :initarg :sub :accessor sail-sub))
+  (:documentation "This is the superclass of all sails."))
+
+(defclass sail-view ()
+  ()
+  (:documentation "The sail object responsible for rendering information on the page.  This
+is used internally and "))
+
+(defclass html-sail-view (sail-view) ())
+
+(defclass dom-inspired-event (event)
+  ((dom-origin :initarg :dom-origin :accessor event-dom-origin)))
+
+(defclass sail-inspired-event (event)
+  ((sail :initarg :sail-origin :accessor event-sail-origin)))
+
+(defvar *sails-document* nil)
+
+(defmethod initialize-instance ((sail standard-sail))
+  (setf (sail-sub sail) (create))
+  (call-next-method))
+
+(defgeneric add-subsail (sail standard-sail &key group position)
+  (:documentation "Adds a subcomponent to a given sail.  Right now this can only be called
+after the sail has rendered.  group-name indicates the name of the group of subcomponents
+to which we are adding this subsail."))
+
+(defgeneric parent-sail (sail)
+  (:documentation "Returns the parent sail of the given sail."))
+
+(defgeneric add-subsail (parent-sail sail &optional group-name)
+  (:documentation "Adds SAIL to PARENT-SAIL, attaching to the dom at the field given
+by GROUP-NAME."))
+
+(defgeneric manifest-sail (sail writer)
+  (:documentation "Writes a sail's html to the page.  WRITER is a function that takes an
+HTML string as its only argument and purportedly writes HTML to a document."))
+
+(defgeneric generate-html (sail)
+  (:documentation "Returns an HTML string for the given sail."))
+
+(defgeneric post-render (sail)
+  (:documentation "Called once the sail has been inserted into the DOM of the page."))
+
+(defmethod event-fired ((sail standard-sail) ev)
+  (call-next-method)
+  (let ((parent (parent-sail sail)))
+    (when parent  
+      (event-fired parent ev))))
+
+(defmethod post-render ((sail standard-sail)))
+
+(defmethod parent-sail ((sail standard-sail))
+  (return (slot-value sail 'parent-sail)))
+
+(defun insert-by-group-name (sail group-name raw-html)
+  (elem-insert (slot-value sail 'view 'dom group-name) raw-html :top))
+;  (new (global::-insertion.-top (slot-value sail 'view 'dom group-name) raw-html)))
+;  (new (global::-insertion.-top (slot-value sail 'view 'dom group-name) raw-html)))
+;  (let ((group-elem (slot-value sail.view.dom group-name)))
+
+(defun establish-group (sail name &key sorter)
+  (let ((group (array)))
+    (when sorter (setf (slot-value group 'sorter) sorter))
+    (setf (slot-value sail 'sub name) group)
+    (return group)))
+
+(defmethod add-subsail ((parent-sail standard-sail)
+                        (subsail standard-sail)
+			&key
+			(group "children")
+			(position :bottom))
+;  (log (+ "add-subsail group: " group))
+  (let* ((group-name group)
+	 (group
+	  (defaultf (slot-value parent-sail 'sub group-name) (array))))
+    (setf (slot-value subsail 'parent-sail) parent-sail)
+    (methcall :push group subsail)
+    (when (slot-value group 'sorter)
+      (methcall :sort group (slot-value group 'sorter)))
+    (let ((insert-index (methcall :index-of group subsail))
+	  (html-writer nil))
+;      (log (+ "Insert index: " insert-index " vs. group length: " (length group)))
+      (cond
+	((== (slot-value group :length) 1)
+	 (setf html-writer
+	       (lambda (raw-html)
+		 (insert-by-group-name parent-sail group-name raw-html))))
+	((==  0 insert-index)
+	 (setf html-writer
+	       (lambda (raw-html)
+		 (elem-insert (sail-first-node (slot-value (aref group 1) 'view)) raw-html :before))))
+	(t
+	 (setf html-writer
+	       (lambda (raw-html)
+;		 (log group)
+		 (elem-insert (sail-last-node (slot-value (aref group (- insert-index 1)) 'view)) raw-html :after)))))
+      
+      (manifest-sail subsail html-writer)
+      (return subsail))))
+
+(defmethod manifest-sail ((sail standard-sail) writer)
+  (render-html (slot-value sail 'view) writer)
+  (post-render sail)
+  (fill-with-content sail)
+;  (paren-psos::log "MAnifest sail returning!")
+  (return sail))
+
+(defmethod initialize-instance ((view html-sail-view))
+;  (log "INITIALIZED HTML SAIL VIEW")
+  (call-next-method)
+  (setf (slot-value view 'dom) (create))
+  (setf (slot-value view 'dom-info) (create)))
+
+(defmethod render-html ((view html-sail-view) writer doc)
+  (writer (generate-html view)))
+
+(defmethod render-html :after ((view html-sail-view) writer &optional (doc document))
+  (setf (slot-value view 'dom) (locate-dom-nodes view doc)) )
+
+(defun fill-with-content (sail)
+  ""
+;  (paren-psos::log "Fill sail with content.")
+  (let ((initarg-map (class-initarg-map (class-of sail))))
+
+;    (paren-psos::log (slot-value sail 'view 'dom-info))
+
+    (for-in (field-name (slot-value sail 'view 'dom-info))
+	    (let* ((prop (slot-value initarg-map field-name))
+		   (val (when prop (slot-value sail prop))))
+;	      (log (+ "Field : " field-name ", Prop: " prop ", Value: " val))
+	      (when val (setf (slot-value sail 'view 'dom field-name :inner-h-t-m-l)
+			      val))))))
+
+(defun set-field-inner-html (sail field-name html-contents)
+  "Sets the HTML of the field named by FIELD-NAME in an instance of a sail."
+;  (paren-psos::log (+ "set-field-inner-html Field : " field-name " DOM: " (slot-value sail 'view 'dom field-name) ", Value: " html-contents))
+  (setf (slot-value sail 'view 'dom field-name :inner-h-t-m-l) html-contents))
+
+(defun sail-last-node (view) 
+  (return (slot-value view 'last)))
+
+(defun sail-first-node (view)
+  (return (slot-value view 'first)))
+
+(defmethod locate-dom-nodes ((view html-sail-view) doc)
+  (let ((rv (create)))
+    (for-in (field-name (slot-value view 'dom-info))
+      (let* ((info (slot-value view 'dom-info field-name))
+	     (elem (methcall :get-element-by-id doc (slot-value info 'id)))
+	     (first? (slot-value info 'first))
+	     (last? (slot-value info 'last)))
+        (setf (slot-value rv field-name) elem)
+        (when first? (setf (slot-value view 'first) elem))
+        (when last? (setf (slot-value view 'last) elem))))
+    (return rv)))
+  
+(defvar *id-counter* 0
+  "Each field is assigned a unique id.  This numeric counter ensures unique ID assignment.")
+
+(defun gen-field-id (&optional (name "anon"))
+  (let ((num (incf *id-counter*)))
+    (return (+ name num))))
+
+(defun def-field (view name &optional (key-obj (create)))
+  "Called within render-html to generate an id for a field and also declare relevant information
+about that field.  We may rethink this when sail generation is integrated with the metaobject protocol."
+;  (log view)
+  (let* ((first (slot-value key-obj :first))
+	 (last (slot-value key-obj :last))
+	 (id (slot-value key-obj :id))
+	 (info (setf (slot-value view 'dom-info name) (create))))
+    (setf (slot-value info 'id) (or id (gen-field-id name)))
+    (when first
+      (setf (slot-value info 'first) t))
+    (when last
+      (setf (slot-value info 'last) t))
+    (return (slot-value info 'id))))
+
+;;; Hiding/Showing
+(defun sibling-nodes-between (node1 node2)
+  "Returns an array of DOM nodes between two nodes, including each of them."
+  (let ((rv (array node1)))
+    (while (!= node1 node2)
+      (let ((next-node (slot-value node1 :next-sibling)))
+	(when (== nil next-node)
+	  (break))
+	(methcall :push rv next-node)
+	(setf node1 next-node)))
+    (return rv)))
+
+(defmethod sail-root-elements ((sail standard-sail))
+  (let ((res (array))
+	(first (sail-first-node (slot-value sail 'view)))
+	(last (sail-last-node (slot-value sail 'view))))
+    (dolist (sibling (sibling-nodes-between first last))
+      (when (== 1 (slot-value sibling :node-type))
+	(methcall :push res sibling)))
+    (return res)))
+
+(defmethod make-sail-visible ((sail standard-sail))
+  (dolist (sibling-node (sail-root-elements sail))
+    (setf (slot-value sibling-node :style :visibility) "visible")))
+
+(defmethod hide-sail ((sail standard-sail))
+  (dolist (sibling-node (sail-root-elements sail))
+    (setf (slot-value sibling-node :style :display) "none")))
+
+(defmethod display-sail ((sail standard-sail))
+  (dolist (sibling-node (sail-root-elements sail))
+    (setf (slot-value sibling-node :style :display) "")))
+
+;;; Sails Document Model
+(defmethod initialize-instance ((doc sails-document))
+  (call-next-method)
+  (defaultf doc.focus nil))
+
+(setf *sails-document* (new (sails-document)))
+
+(defgeneric on-focus (sail event)
+  (:documentation "Called when the given sail is focussed."))
+
+(defgeneric on-blur (sail event)
+  (:documentation "Called when the given sail loses focus."))
+
+(defmethod on-focus (empty event))
+(defmethod on-blur (empty event))
+
+(defun focus-sail (sail)
+  (when *sails-document*.focus
+    (on-blur *sails-document*.focus nil))
+  (setf *sails-document*.focus sail)
+  (when sail
+    (on-focus sail nil)))
+
+;;;; HTML/JS utility
+(defun insertion-fn (location)
+  "Returns a function of two arguments--an element and a DOM node--that will insert the DOM node into the page :before, :after
+at the :top or :bottom of the element."
+  (let ((result nil))
+    (case location
+      (:before (setf result (lambda (element node)
+			      (methcall :insert-before (slot-value element :parent-node)  node element))))
+      (:after (setf result  (lambda (element node)
+			      (methcall :insert-before (slot-value element :parent-node)   node (slot-value element :next-sibling)))))
+      (:top (setf result  (lambda (element node)
+			    (methcall :insert-before element node (slot-value element :first-child)))))
+      (:bottom (setf result (lambda (element node)
+			      (methcall :insert-before (slot-value element :parent-node) node (slot-value element :next-sibling))))))
+    (return result)))
+
+(defvar *tag-table*
+  (create "TABLE" (array "<table>" "</table>" 1)
+	  "TBODY" (array "<table><tbody>" "</tbody></table>" 2)
+	  "TR" (array "<table><tbody><tr>" "</tr></tbody></table>" 3)
+	  "TD" (array "<table><tbody><tr><td>" "</td></tr></tbody></table>" 4)
+	  "SELECT" (array "<select>" "</select>" 1)))
+
+(defvar *attribute-translations*
+  (create "class" "className"
+	  "for" "htmlFor"))
+
+(defvar *internet-explorer*
+  (and (slot-value js-global:window :attach-event) (not (slot-value js-global:window :operate)) t))
+
+
+(defun write-attributes (elem attributes)
+  (for-in (attr attributes)
+	  (let ((name (or (slot-value *attribute-translations* name) name))
+		(value (slot-value attributes attr)))
+	    (cond
+	      ((or (=== false value) (=== nil value))       (methcall elem :remove-attribute name))
+	      ((=== true value) (methcall elem :set-attribute name name))
+	      (t (methcall elem :set-attribute name value)))))
+  (return elem))
+
+(defun create-elem (tag-name &optional (attributes-obj (create)))
+  (setf tag-name (methcall :to-lower-case tag-name))
+  (when (and *internet-explorer* (slot-value attributes-obj :name))
+    (setf tag-name (+ "<" tag-name " name=\"" (slot-value attributes-obj :name) "\">"))
+    (delete (slot-value attributes-obj :name)))
+  
+  (let ((elem (methcall :create-element js-global:document tag-name)))
+    (write-attributes elem attributes-obj)
+    (return elem)))
+
+(defun html-content-to-dom-nodes (html-content tag-name)
+  "Given some HTML content, inserts it into an anonymous element with the given tag-name (e.g. 'DIV', 'TABLE'),
+and returns an array of elements."
+;  (parn-psos::log  (+ "Converting HTML " html-content " to DOM nodes in tag with name " tag-name))
+  (let* ((div (create-elem "div"))
+	 (tag (slot-value *tag-table* (methcall :to-upper-case tag-name))))
+    (if tag
+	(progn
+	  (setf (slot-value div :inner-h-t-m-l) (+ (aref tag 0) html-content (aref tag 1)))
+	  (dotimes (i (aref tag 2))
+	    (setf div (slot-value div :first-child))))
+	 (setf (slot-value div :inner-h-t-m-l) html-content))
+    (return (to-array (slot-value div :child-nodes)))))
+
+(defun elem-insert (elem content location)
+  "Location is one of :top :bottom :before :after.  Content is an html string."
+  (let* ((insert-fn (insertion-fn location))
+	 (insert-elem-tag-name (slot-value (if (or (== :before location) (== :after location))
+					       (slot-value elem :parent-node)
+					       elem)
+					   :tag-name))
+	 (content-nodes (html-content-to-dom-nodes content insert-elem-tag-name)))
+    (when (or (== :top location) (== :after location))
+      (methcall :reverse content-nodes))
+
+    (lispy-map (lambda (content-node)
+		 (insert-fn elem content-node))
+	       content-nodes)))
+    
+    ;(slot-value 

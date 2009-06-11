@@ -1,0 +1,63 @@
+;;; General sails functionality to work with the parenscript object system
+
+;; this file defines a base sail class that custom sails programmed using
+;; the PSOS can use.
+
+
+(defclass general-sail ())
+;(defvar autocomplete-helper -red.-love.-autocomplete-helper)
+
+(defmethod render-html ((gensail general-sail) html-writer)
+  (return (gensail.view.render-h-t-m-l html-writer)))
+
+(defmethod create-sail ((gensail general-sail) html-writer)
+  ;render to the page
+  (render-html gensail html-writer))
+
+(defmethod add-subsail ((gensail general-sail) subsail group-name)
+  (gensail.add-subsail subsail group-name))
+
+(defmethod form-subgroup ((gensail general-sail) groupname insert-function sort-function)
+  (return (gensail.form-sub-group groupname insert-function sort-function)))
+
+(defmethod parent-sail ((gensail general-sail))
+  (return (gensail.get-parent)))
+
+; post-render is called after the sail is written to the screen.
+; this is where display initiation takes place
+(defmethod post-render ((gensail general-sail)))
+
+(defmethod make-sail-visible ((gensail general-sail))
+  (dolist (sibling-node (sibling-nodes-between (get-first-element gensail)
+					       (get-last-element gensail)))
+    (when (== sibling-node.node-type 1)
+      (setf sibling-node.style.visibility "visible"))))
+
+(defmethod hide-sail ((gensail general-sail))
+  (dolist (sibling-node (sibling-nodes-between (get-first-element gensail)
+					       (get-last-element gensail)))
+    (when (== sibling-node.node-type 1)
+      (element-hide sibling-node))))
+
+
+(defmethod display-sail ((gensail general-sail))
+  (dolist (sibling-node (sibling-nodes-between (get-first-element gensail)
+					       (get-last-element gensail)))
+    (when (== sibling-node.node-type 1)
+      (element-show sibling-node))))
+
+(defmethod initialize-instance ((gensail general-sail))
+  (-sail.-controller.call gensail gensail.view)
+  (setf gensail.view.on-written
+	(lambda ()
+	  (post-render gensail)
+	  (make-sail-visible gensail))))
+
+(defmethod get-root-element ((sail general-sail))
+  (return (sail.view.get-first-node)))
+
+(defmethod get-first-element ((sail general-sail))
+  (return (sail.view.get-first-node)))
+
+(defmethod get-last-element ((sail general-sail))
+  (return (sail.view.get-last-node)))

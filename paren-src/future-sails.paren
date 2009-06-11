@@ -1,0 +1,44 @@
+;;; General sails functionality to work with the parenscript object system
+
+;; this file defines a base sail class that custom sails programmed using
+;; the PSOS can use.
+
+(defvar general-sail sail-controller)
+(defvar create-sail render-html)
+
+; post-render is called after the sail is written to the screen.
+; this is where display initiation takes place
+(defmethod post-render ((gensail sail-controller)))
+
+(defmethod make-sail-visible ((gensail sail-controller))
+  (dolist (sibling-node (sibling-nodes-between (get-first-element gensail)
+					       (get-last-element gensail)))
+    (when (== sibling-node.node-type 1)
+      (setf sibling-node.style.visibility "visible"))))
+
+(defmethod hide-sail ((gensail sail-controller))
+  (dolist (sibling-node (sibling-nodes-between (get-first-element gensail)
+					       (get-last-element gensail)))
+    (when (== sibling-node.node-type 1)
+      (element-hide sibling-node))))
+
+
+(defmethod display-sail ((gensail sail-controller))
+  (dolist (sibling-node (sibling-nodes-between (get-first-element gensail)
+					       (get-last-element gensail)))
+    (when (== sibling-node.node-type 1)
+      (element-show sibling-node))))
+
+(defmethod initialize-instance ((gensail sail-controller))
+  (-sail.-controller.call gensail gensail.view)
+  (setf gensail.view.on-written
+	(lambda ()
+	  (post-render gensail)
+	  (make-sail-visible gensail))))
+
+(defmethod get-root-element ((sail sail-controller))
+  (return (sail.view.get-first-node)))
+(defmethod get-first-element ((sail sail-controller))
+  (return (sail.view.get-first-node)))
+(defmethod get-last-element ((sail sail-controller))
+  (return (sail.view.get-last-node)))
