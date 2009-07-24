@@ -8,6 +8,7 @@
    #:generate-sail-definition
    
    ;;; symbols from the Parenscript side
+   #:defsail
    #:standard-sail
    #:sail-view
    #:html-sail-view

@@ -206,12 +206,19 @@
 		   result))
 	     root-elements)))
 
+(defun xml-escape-string (str)
+  "Escape a string so that it may be unescaped by an xml parser."
+  (cl-who:escape-string str))
+
 (defun alist-as-attr-string (alist)
   (format nil "~{~A ~}"
 	  (mapcar #'(lambda (attrib-pair)
 		      (format nil (format nil "~A=\"~A\""
-					  (car attrib-pair)
-					  (cdr attrib-pair))))
+					  (let ((it (car attrib-pair)))
+					    (if (stringp it) (xml-escape-string it) it))
+					  (let ((it (cdr attrib-pair)))
+					    (if (stringp it) (xml-escape-string it) it)))))
+
 		  alist)))
 
 ;; TODO: this function is long.  break up all the labels.
@@ -227,9 +234,13 @@ the HTML of the sail to a page."
                "<" ,(string (element-name sail-elem)) " "
                ,(alist-as-attr-string (reverse (element-attributes sail-elem)))
                ,@(mapcan #'(lambda (attr-pair)
-                             (list (car attr-pair) "=\"" (cdr attr-pair) "\""))
-                         (generate-dynamic-attributes
-                          sail-elem :view-variable view-variable :gen-id-function gen-id-function))
+                             (list (car attr-pair)
+				   "=\""
+				   (cdr attr-pair)
+				   "\""))
+                         (generate-dynamic-attributes sail-elem
+						      :view-variable view-variable
+						      :gen-id-function gen-id-function))
                ,(if (not close-explicit?) " />" " >")
                ,@(mapcar #'(lambda (child-node)
                              (typecase child-node
@@ -259,3 +270,32 @@ the HTML of the sail to a page."
               (invoke-restart 's-xml::use-package *package* ))))
       (sail-stream-to-paren-html-generator
        stream (intern (format nil "EXAMPLE-SAIL-~A" test-number))))))
+
+
+(defpsmacro defsail (sail-name &optional superclasses class-slots &rest options)
+  "Syntax sugar for defining sails.
+an :html option "
+  (let* ((view-class-name
+	  (intern
+	   (concatenate
+	    'string
+	    (string sail-name) "-VIEW")))
+	 (html-option-rest (rest (find :html options :key #'car)))
+	 (html (when html-option-rest
+		 (eval `(progn ,@html-option-rest))))
+	 (options (remove :html options :key #'car)))
+    `(progn
+      (defclass ,sail-name ,(or superclasses '(standard-sail)) ,class-slots ,@options)
+;      (merge-into (slot-value ,sail-name 'prototype) -sail.-controller.prototype)
+      (defmethod initialize-instance :before ((our-sail ,sail-name))
+        (setf our-sail.view
+              (make-instance ,view-class-name))
+	;(log (+ "Initializing instance of class " ,(string sail-name)))
+	;(log our-sail))
+	)
+      ,@(when html
+	  (list
+	   (with-input-from-string (stream html)
+	     (cl-sails:generate-sail-definition stream
+						view-class-name
+						:view-class-name view-class-name)))))))

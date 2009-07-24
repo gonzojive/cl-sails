@@ -20,7 +20,7 @@
 				  :components 
 				  ((:parenscript-file "sails"))))))
 
-  :depends-on ("cl-ppcre" "s-xml" "paren-psos" "paren-util" "paren-files" "parenscript" "paren-events")) ;"xml-mop" "parenscript"))
+  :depends-on ("cl-ppcre" "s-xml" "cl-who" "paren-psos" "paren-util" "paren-files" "parenscript" "paren-events")) ;"xml-mop" "parenscript"))
 
 (defsystem cl-sails-tests
   :components ((:module "test"
