@@ -15,14 +15,15 @@
    #:dom-inspired-event
    #:sail-inspired-event
    ;; functions
-   #:parent-sail
+   #:sail-supersail
+   #:remove-from-supersail
    #:add-subsail
    #:establish-group
    #:generate-html
    #:post-render
    #:manifest-sail
    #:hide-sail
-   #:display-sail
+   #:show-sail
    #:set-field-inner-html
    ;; members
    #:dom

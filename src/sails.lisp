@@ -288,7 +288,7 @@ an :html option "
       (defclass ,sail-name ,(or superclasses '(standard-sail)) ,class-slots ,@options)
 ;      (merge-into (slot-value ,sail-name 'prototype) -sail.-controller.prototype)
       (defmethod initialize-instance :before ((our-sail ,sail-name))
-        (setf our-sail.view
+        (setf (slot-value our-sail :view)
               (make-instance ,view-class-name))
 	;(log (+ "Initializing instance of class " ,(string sail-name)))
 	;(log our-sail))

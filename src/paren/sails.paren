@@ -20,7 +20,9 @@
 
 (defclass standard-sail ()
   ((view :initarg :view :accessor sail-view)
-   (sub :initarg :sub :accessor sail-sub))
+   (sub :initarg :sub :accessor sail-sub)
+   (supersail :initarg :supersail :accessor sail-supersail)
+   (supersail-group :initarg :supersail-group :accessor sail-supersail-group))
   (:documentation "This is the superclass of all sails."))
 
 (defclass sail-view ()
@@ -49,12 +51,8 @@ is used internally and "))
 after the sail has rendered.  group-name indicates the name of the group of subcomponents
 to which we are adding this subsail."))
 
-(defgeneric parent-sail (sail)
-  (:documentation "Returns the parent sail of the given sail."))
-
-(defgeneric add-subsail (parent-sail sail &optional group-name)
-  (:documentation "Adds SAIL to PARENT-SAIL, attaching to the dom at the field given
-by GROUP-NAME."))
+(defgeneric remove-from-supersail (sail)
+  (:documentation "Removes SAIL from its PARENT-SAIL and from the DOM."))
 
 (defgeneric manifest-sail (sail writer)
   (:documentation "Writes a sail's html to the page.  WRITER is a function that takes an
@@ -68,14 +66,11 @@ HTML string as its only argument and purportedly writes HTML to a document."))
 
 (defmethod event-fired ((sail standard-sail) ev)
   (call-next-method)
-  (let ((parent (parent-sail sail)))
+  (let ((parent (sail-supersailsail sail)))
     (when parent  
       (event-fired parent ev))))
 
 (defmethod post-render ((sail standard-sail)))
-
-(defmethod parent-sail ((sail standard-sail))
-  (return (slot-value sail 'parent-sail)))
 
 (defun insert-by-group-name (sail group-name raw-html)
   (elem-insert (slot-value sail 'view 'dom group-name) raw-html :top))
@@ -89,21 +84,48 @@ HTML string as its only argument and purportedly writes HTML to a document."))
     (setf (slot-value sail 'sub name) group)
     (return group)))
 
+(defmethod remove-from-supersail ((sail standard-sail))
+  (log sail)
+  ;; 1. remove all of the DOM nodes from the document
+  (let ((root-elems (sail-root-elements sail)))
+    (dolist (elem root-elems)
+      (remove-elem elem)))
+  ;; 2. remove ourselves from the parent subsails
+  (remove-from-array (slot-value (sail-supersail sail)
+				 'sub
+				 (sail-supersail-group sail))
+		     sail)
+  ;; 3. Update slots to reflect changes
+  (setf (sail-supersail sail) nil)
+  (setf (sail-supersail-group sail) nil))
+  
+
 (defmethod add-subsail ((parent-sail standard-sail)
                         (subsail standard-sail)
 			&key
 			(group "children")
 			(position :bottom))
+  ;; position is ignored
 ;  (log (+ "add-subsail group: " group))
 ;  (log "Parent-sail:")
 ;  (log parent-sail)
   (let* ((group-name group)
 	 (group
 	  (defaultf (slot-value parent-sail 'sub group-name) (array))))
-    (setf (slot-value subsail 'parent-sail) parent-sail)
-    (methcall :push group subsail)
+
+    (setf (sail-supersail subsail) parent-sail)
+    (setf (sail-supersail-group subsail) group-name)
+    (methcall 'js-global::splice
+	      group
+	      (if (=== :top position)
+		  0
+		  (length group))
+	      0
+	      subsail)
     (when (slot-value group 'sorter)
       (methcall :sort group (slot-value group 'sorter)))
+
+    ;; insert the html as appropriate depending on where in the group it is being added
     (let ((insert-index (methcall :index-of group subsail))
 	  (html-writer nil))
 ;      (log (+ "Insert index: " insert-index " vs. group length: " (length group)))
@@ -230,16 +252,16 @@ about that field.  We may rethink this when sail generation is integrated with t
 
 (defmethod hide-sail ((sail standard-sail))
   (dolist (sibling-node (sail-root-elements sail))
-    (setf (slot-value sibling-node :style :display) "none")))
+    (elem-hide sibling-node)))
 
-(defmethod display-sail ((sail standard-sail))
+(defmethod show-sail ((sail standard-sail))
   (dolist (sibling-node (sail-root-elements sail))
-    (setf (slot-value sibling-node :style :display) "")))
+    (elem-show sibling-node)))
 
 ;;; Sails Document Model
 (defmethod initialize-instance ((doc sails-document))
   (call-next-method)
-  (defaultf doc.focus nil))
+  (defaultf (slot-value doc :focus) nil))
 
 (setf *sails-document* (new (sails-document)))
 
@@ -253,90 +275,8 @@ about that field.  We may rethink this when sail generation is integrated with t
 (defmethod on-blur (empty event))
 
 (defun focus-sail (sail)
-  (when *sails-document*.focus
-    (on-blur *sails-document*.focus nil))
-  (setf *sails-document*.focus sail)
+  (when (slot-value *sails-document* :focus)
+    (on-blur (slot-value *sails-document* :focus) nil))
+  (setf (slot-value *sails-document* :focus) sail)
   (when sail
     (on-focus sail nil)))
-
-;;;; HTML/JS utility
-(defun insertion-fn (location)
-  "Returns a function of two arguments--an element and a DOM node--that will insert the DOM node into the page :before, :after
-at the :top or :bottom of the element."
-  (let ((result nil))
-    (case location
-      (:before (setf result (lambda (element node)
-			      (methcall :insert-before (slot-value element :parent-node)  node element))))
-      (:after (setf result  (lambda (element node)
-			      (methcall :insert-before (slot-value element :parent-node)   node (slot-value element :next-sibling)))))
-      (:top (setf result  (lambda (element node)
-			    (methcall :insert-before element node (slot-value element :first-child)))))
-      (:bottom (setf result (lambda (element node)
-			      (methcall :insert-before (slot-value element :parent-node) node (slot-value element :next-sibling))))))
-    (return result)))
-
-(defvar *tag-table*
-  (create "TABLE" (array "<table>" "</table>" 1)
-	  "TBODY" (array "<table><tbody>" "</tbody></table>" 2)
-	  "TR" (array "<table><tbody><tr>" "</tr></tbody></table>" 3)
-	  "TD" (array "<table><tbody><tr><td>" "</td></tr></tbody></table>" 4)
-	  "SELECT" (array "<select>" "</select>" 1)))
-
-(defvar *attribute-translations*
-  (create "class" "className"
-	  "for" "htmlFor"))
-
-(defvar *internet-explorer*
-  (and (slot-value js-global:window :attach-event) (not (slot-value js-global:window :operate)) t))
-
-
-(defun write-attributes (elem attributes)
-  (for-in (attr attributes)
-	  (let ((name (or (slot-value *attribute-translations* name) name))
-		(value (slot-value attributes attr)))
-	    (cond
-	      ((or (=== false value) (=== nil value))       (methcall elem :remove-attribute name))
-	      ((=== true value) (methcall elem :set-attribute name name))
-	      (t (methcall elem :set-attribute name value)))))
-  (return elem))
-
-(defun create-elem (tag-name &optional (attributes-obj (create)))
-  (setf tag-name (methcall :to-lower-case tag-name))
-  (when (and *internet-explorer* (slot-value attributes-obj :name))
-    (setf tag-name (+ "<" tag-name " name=\"" (slot-value attributes-obj :name) "\">"))
-    (delete (slot-value attributes-obj :name)))
-  
-  (let ((elem (methcall :create-element js-global:document tag-name)))
-    (write-attributes elem attributes-obj)
-    (return elem)))
-
-(defun html-content-to-dom-nodes (html-content tag-name)
-  "Given some HTML content, inserts it into an anonymous element with the given tag-name (e.g. 'DIV', 'TABLE'),
-and returns an array of elements."
-;  (parn-psos::log  (+ "Converting HTML " html-content " to DOM nodes in tag with name " tag-name))
-  (let* ((div (create-elem "div"))
-	 (tag (slot-value *tag-table* (methcall :to-upper-case tag-name))))
-    (if tag
-	(progn
-	  (setf (slot-value div :inner-h-t-m-l) (+ (aref tag 0) html-content (aref tag 1)))
-	  (dotimes (i (aref tag 2))
-	    (setf div (slot-value div :first-child))))
-	 (setf (slot-value div :inner-h-t-m-l) html-content))
-    (return (to-array (slot-value div :child-nodes)))))
-
-(defun elem-insert (elem content location)
-  "Location is one of :top :bottom :before :after.  Content is an html string."
-  (let* ((insert-fn (insertion-fn location))
-	 (insert-elem-tag-name (slot-value (if (or (== :before location) (== :after location))
-					       (slot-value elem :parent-node)
-					       elem)
-					   :tag-name))
-	 (content-nodes (html-content-to-dom-nodes content insert-elem-tag-name)))
-    (when (or (== :top location) (== :after location))
-      (methcall :reverse content-nodes))
-
-    (lispy-map (lambda (content-node)
-		 (insert-fn elem content-node))
-	       content-nodes)))
-    
-    ;(slot-value 
