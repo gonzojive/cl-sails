@@ -8,11 +8,8 @@
 
 (in-package :sails)
 
-;   to describe components, and is a system comparable to the dojo framework without
-;   trying to be everything to everybody.
-
-; Sails currently uses Parenscript and the Parenscript Object System to represent sail
-; objects.
+;; Sails currently uses Parenscript and the Parenscript Object System to represent sail
+;; objects.
 
 (defclass sails-document (event-emitter)
   ((focus :accessor saildoc-focus :initform nil))
@@ -85,7 +82,6 @@ HTML string as its only argument and purportedly writes HTML to a document."))
     (return group)))
 
 (defmethod remove-from-supersail ((sail standard-sail))
-  (log sail)
   ;; 1. remove all of the DOM nodes from the document
   (let ((root-elems (sail-root-elements sail)))
     (dolist (elem root-elems)
@@ -258,6 +254,12 @@ about that field.  We may rethink this when sail generation is integrated with t
   (dolist (sibling-node (sail-root-elements sail))
     (elem-show sibling-node)))
 
+(defmethod sail-field ((sail standard-sail) field-name)
+  (return (slot-value sail 'view 'dom field-name)))
+
+(defmethod sail-subsails ((sail standard-sail) &optional (group-name "children"))
+  (return (copy-array (or (slot-value sail 'sub group-name) (array)))))
+
 ;;; Sails Document Model
 (defmethod initialize-instance ((doc sails-document))
   (call-next-method)
@@ -280,3 +282,4 @@ about that field.  We may rethink this when sail generation is integrated with t
   (setf (slot-value *sails-document* :focus) sail)
   (when sail
     (on-focus sail nil)))
+

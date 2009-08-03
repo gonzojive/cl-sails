@@ -84,10 +84,13 @@
         (list (cons "id" id-expr))))))
 
 (defun sail-stream-to-paren-html-generator (stream sail-class-name)
-  `(defmethod generate-html ((sail ,sail-class-name))
-    (return ,(sail-xml-to-paren-expression stream :view-variable 'sail))))
+  (if (null stream)
+      `(progn)
+      `(defmethod generate-html ((sail ,sail-class-name))
+	 (return ,(sail-xml-to-paren-expression stream :view-variable 'sail)))))
 
-(defun generate-sail-definition (sail-stream class-name &key view-class-name)
+(defun generate-sail-definition (sail-stream class-name &key view-class-name view-superclasses)
+  (declare (ignore class-name))
   (when (null view-class-name)
     (error "NULL VIEW-CLASS-NAME not allowed."))
 ;    (setf view-class-name (intern (format nil "~A-VIEW" class-name)
@@ -98,7 +101,7 @@
 	    (declare (ignore err))
             (invoke-restart 's-xml::use-package (find-package :cl-sails)))))
     `(progn
-      (defclass ,view-class-name (html-sail-view)
+      (defclass ,view-class-name (,@view-superclasses)
 	())
       ,(sail-stream-to-paren-html-generator sail-stream view-class-name))))
 
@@ -281,6 +284,8 @@ an :html option "
 	    'string
 	    (string sail-name) "-VIEW")))
 	 (html-option-rest (rest (find :html options :key #'car)))
+	 (view-superclasses (or (rest (find :view-superclasses options :key #'car))
+				'(html-sail-view)))
 	 (html (when html-option-rest
 		 (eval `(progn ,@html-option-rest))))
 	 (options (remove :html options :key #'car)))
@@ -293,9 +298,15 @@ an :html option "
 	;(log (+ "Initializing instance of class " ,(string sail-name)))
 	;(log our-sail))
 	)
-      ,@(when html
-	  (list
+      ,(if html
 	   (with-input-from-string (stream html)
 	     (cl-sails:generate-sail-definition stream
 						view-class-name
-						:view-class-name view-class-name)))))))
+						:view-class-name view-class-name
+						:view-superclasses view-superclasses))
+	   (cl-sails:generate-sail-definition nil
+					      view-class-name
+					      :view-class-name view-class-name
+					      :view-superclasses view-superclasses)))))
+	   
+      

@@ -15,6 +15,7 @@
    #:dom-inspired-event
    #:sail-inspired-event
    ;; functions
+   #:sail-field
    #:sail-supersail
    #:remove-from-supersail
    #:add-subsail
@@ -25,6 +26,7 @@
    #:hide-sail
    #:show-sail
    #:set-field-inner-html
+   #:sail-subsails
    ;; members
    #:dom
    #:view
