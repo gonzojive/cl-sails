@@ -11,9 +11,30 @@
 ;; Sails currently uses Parenscript and the Parenscript Object System to represent sail
 ;; objects.
 
+(defvar *sails-document* nil)
+
 (defclass sails-document (event-emitter)
-  ((focus :accessor saildoc-focus :initform nil))
+  ((focus :accessor saildoc-focus :initform nil)
+   (all-sail-css :accessor saildoc-css :initform ""))
   (:documentation "For stuff."))
+
+(defmethod saildoc-onload ((saildoc sails-document))
+  (let ((the-html (+ "<style type=\"text/css\">"
+		     (saildoc-css saildoc)
+		     "</style>")))
+    (elem-insert (slot-value js-global:document 'js-global::head)
+		 the-html
+		 :bottom)))
+
+(register-dom-event-handler js-global:document
+			    "load"
+			    (lambda (ev) (saildoc-onload *sails-document*)))
+
+(defun append-sail-css (css-string)
+  "Given a string (of CSS), appends the given CSS to the CSS that needs to be applied
+when the page loads."
+  (setf (saildoc-css *sails-document*)
+	(+ (saildoc-css *sails-document*) css-string)))
 
 (defclass standard-sail ()
   ((view :initarg :view :accessor sail-view)
@@ -34,8 +55,6 @@ is used internally and "))
 
 (defclass sail-inspired-event (event)
   ((sail :initarg :sail-origin :accessor event-sail-origin)))
-
-(defvar *sails-document* nil)
 
 (defmethod initialize-instance ((sail standard-sail))
   ;(log "Initializing standard sail.")

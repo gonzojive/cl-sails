@@ -14,6 +14,7 @@
    #:html-sail-view
    #:dom-inspired-event
    #:sail-inspired-event
+   #:register-sail-event-handlers
    ;; functions
    #:sail-field
    #:sail-supersail
@@ -27,6 +28,7 @@
    #:show-sail
    #:set-field-inner-html
    #:sail-subsails
+   #:append-sail-css
    ;; members
    #:dom
    #:view

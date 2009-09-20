@@ -277,18 +277,31 @@ the HTML of the sail to a page."
 
 (defpsmacro defsail (sail-name &optional superclasses class-slots &rest options)
   "Syntax sugar for defining sails.
-an :html option "
+The :html option sets the HTML for the sail view.  This a lisp form which is evaluated.
+
+The :css option sets the CSS for the sail view.  This is a lisp form which is evaluated.
+
+example:
+  (defsail thing-sail ()
+    ()
+    (:css (css-sexp:with-css-output-to-string (s)
+            (:body :font-face \"serif\"))))
+"
   (let* ((view-class-name
 	  (intern
 	   (concatenate
 	    'string
 	    (string sail-name) "-VIEW")))
 	 (html-option-rest (rest (find :html options :key #'car)))
+	 (css-option-rest (rest (find :css options :key #'car)))
 	 (view-superclasses (or (rest (find :view-superclasses options :key #'car))
 				'(html-sail-view)))
 	 (html (when html-option-rest
 		 (eval `(progn ,@html-option-rest))))
-	 (options (remove :html options :key #'car)))
+	 (css (when css-option-rest
+		(eval `(progn ,@css-option-rest))))
+	 (options (remove-if #'(lambda (x) (member x '(:html :css)))
+			     options :key #'car)))
     `(progn
       (defclass ,sail-name ,(or superclasses '(standard-sail)) ,class-slots ,@options)
 ;      (merge-into (slot-value ,sail-name 'prototype) -sail.-controller.prototype)
@@ -298,6 +311,8 @@ an :html option "
 	;(log (+ "Initializing instance of class " ,(string sail-name)))
 	;(log our-sail))
 	)
+      ,(when css
+	 `(append-sail-css ,css))
       ,(if html
 	   (with-input-from-string (stream html)
 	     (cl-sails:generate-sail-definition stream
@@ -310,3 +325,25 @@ an :html option "
 					      :view-superclasses view-superclasses)))))
 	   
       
+(defpsmacro register-sail-event-handlers ((sail &optional sail-value)
+					  &body handler-descriptions)
+  "SAIL is the symbol used for the sail.  If no SAIL-VALUE is supplied, or it is nil, then
+we assume SAIL is a variable bound to the relevant SAIL.  Otherwise, SAIL will be bound
+to SAIL-VALUE.
+
+Then each handler description is processed.  A handler description looks like this:
+   (field-name event-name handler-lambda-list &body handler-body)
+
+Each handler description is turned into an event registration of the event named NAME on the
+DOM element denoted by field FIELD_NAME with handler function described by
+   (lambda ,HANDLER-LAMBDA-LIST ,@HANDLER-BODY)."
+  (let ((sail-var (gensym "sail")))
+    `(let ((,sail-var ,(if sail-value sail-value sail)))
+       ,@(mapcar #'(lambda (handler-description)
+		     (destructuring-bind (field-name event-name handler-lambda-list &body handler-body)
+			 handler-description
+		       `(register-dom-event-handler (sail-field ,sail-var ,field-name)
+						    ,event-name
+						    (lambda ,handler-lambda-list ,@handler-body))))
+		 handler-descriptions))))
+
