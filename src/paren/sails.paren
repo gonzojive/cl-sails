@@ -82,7 +82,7 @@ HTML string as its only argument and purportedly writes HTML to a document."))
 
 (defmethod event-fired ((sail standard-sail) ev)
   (call-next-method)
-  (let ((parent (sail-supersailsail sail)))
+  (let ((parent (sail-supersail sail)))
     (when parent  
       (event-fired parent ev))))
 
