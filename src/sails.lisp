@@ -347,3 +347,10 @@ DOM element denoted by field FIELD_NAME with handler function described by
 						    (lambda ,handler-lambda-list ,@handler-body))))
 		 handler-descriptions))))
 
+(defpsmacro setf-field ((sail &key (escape? t)) &body place-value-plist)
+  "(setf-field (sail &key escape?) [ field | (field slot*)     value]+"
+  (with-ps-gensyms (sail-var escape-var)
+    `(let ((,sail-var ,sail))
+       (setf ,@(loop :for (field value) :on place-value-plist :by #'cddr
+		     :collect `(slot-value (sail-field ,sail-var ,field) 'js-global::inner-h-t-m-l)
+		     :collect (if escape? `(escape-html ,value) value))))))

@@ -9,6 +9,8 @@
    
    ;;; symbols from the Parenscript side
    #:defsail
+   #:setf-field
+
    #:standard-sail
    #:sail-view
    #:html-sail-view
