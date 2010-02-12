@@ -4,18 +4,6 @@
   ()
   (:documentation ""))
 
-(defun test-parse (stream)
-  (s-xml:start-parse-xml
-   stream
-   (make-instance
-    's-xml:xml-parser-state
-    :new-element-hook #'(lambda (name attributes seed)
-                          seed)
-    :finish-element-hook #'(lambda (name attributes parent-seed seed)
-                                      seed)
-    :text-hook #'(lambda (string seed)
-                   seed))))
-
 (defclass xml-element ()
   ((name
     :initarg :name
@@ -68,17 +56,18 @@
                       (and (element-first? sails-elem)
                            "first")))
            (id-expr
-            (when field
-              `(,gen-id-function
-                ,view-variable
-                ,field
-                (create
-                 ,@(when (element-first? sails-elem)
-                         (list :first (element-first? sails-elem)))
-                 ,@(when (element-last? sails-elem)
-                         (list :last (element-last? sails-elem)))
-                 ,@(when (element-explicit-id sails-elem)
-                     (list :id (element-explicit-id sails-elem))))))))
+            (if field
+		`(,gen-id-function
+		  ,view-variable
+		  ,field
+		  (create
+		   ,@(when (element-first? sails-elem)
+		       (list :first (element-first? sails-elem)))
+		   ,@(when (element-last? sails-elem)
+		       (list :last (element-last? sails-elem)))
+		   ,@(when (element-explicit-id sails-elem)
+		       (list :id (element-explicit-id sails-elem)))))
+		(element-explicit-id sails-elem))))
       (when id-expr
 ;                 (list (cons 'id "GENERATED-NONSENSE")))
         (list (cons "id" id-expr))))))
@@ -95,15 +84,10 @@
     (error "NULL VIEW-CLASS-NAME not allowed."))
 ;    (setf view-class-name (intern (format nil "~A-VIEW" class-name)
 ;				  (symbol-package class-name))))
-  (handler-bind
-      ((s-xml:unmatched-namespace-error
-        #'(lambda (err)
-	    (declare (ignore err))
-            (invoke-restart 's-xml::use-package (find-package :cl-sails)))))
-    `(progn
-      (defclass ,view-class-name (,@view-superclasses)
-	())
-      ,(sail-stream-to-paren-html-generator sail-stream view-class-name))))
+  `(progn
+     (defclass ,view-class-name (,@view-superclasses)
+       ())
+     ,(sail-stream-to-paren-html-generator sail-stream view-class-name)))
 
 ;; utility
 (defun simplify-adds (paren-expr)
@@ -138,35 +122,49 @@
 ;	   original-arguments
 ;	   :initial-value nil)))
 
-(defun parse-xml (stream)
-  (let ((element-stack nil) (root-elements nil))
-    (s-xml:start-parse-xml
-     stream
-     (make-instance
-      's-xml:xml-parser-state
-      :new-element-hook
-      #'(lambda (name attributes seed)
-	  (let ((new-element
-		 (make-instance 'xml-element :name name :attributes attributes)))
-	    (if element-stack
-		(push new-element (element-child-nodes (first element-stack)))
-		(push new-element root-elements))
-	    (push new-element element-stack))
-	  (when (second element-stack)
-	    (setf (element-close-tag-explicit? (second element-stack)) t))
-	  seed)
-      :finish-element-hook
-      #'(lambda (name attributes parent-seed seed)
-	  (setf (element-child-nodes (first element-stack))
-		(reverse (element-child-nodes (first element-stack))))
-	  (pop element-stack)
-	  seed)
-      :text-hook
-      #'(lambda (string seed)
-	  (setf (element-close-tag-explicit? (first element-stack)) t)
-	  (push string (element-child-nodes (first element-stack)))
-	  seed)))
-    root-elements))
+(defun slurp-stream-string-stream2 (stream)
+  "Return the contents of file as a string."
+  (declare (type stream stream)
+	   (optimize (speed 3)))
+  (with-output-to-string (out)
+    (do ((x (read-char stream nil stream) (read-char stream nil stream)))
+        ((eq x stream))
+      (write-char x out))))
+
+(defun parse-xml (string-or-stream)
+  ;; create an artificial root in case it is a forest
+  (labels ((name (stp-node)
+	     (let ((prefix (stp:namespace-prefix stp-node)))
+	       (if (and prefix (> (length prefix) 0))
+		   (format nil "~A:~A" prefix (stp:local-name stp-node))
+		   (stp:local-name stp-node))))
+	   (process-stp-attribute (attrib)
+	     (cons (name attrib)
+		   (stp:value attrib)))
+	   (process-stp-element (elem)
+	     (let ((children (remove-if #'(lambda (e) (typep e 'stp:comment)) (stp:list-children elem))))
+	       (assert (every #'(lambda (e) (typep e '(or stp:element stp:text))) children))
+	       (make-instance 'xml-element
+			      :name (name elem)
+			      :close-explicit? (or (stp:list-attributes elem)
+						   (stp:list-children elem))
+			      :attributes (stp:map-attributes 'list #'process-stp-attribute elem)
+			      :children (mapcar #'process-stp-node children))))
+	   (process-stp-node (node)
+	     "either an element or text!"
+	     (typecase node
+	       (stp:element (process-stp-element node))
+	       (stp:text (stp:data node))
+	       (t (error "Invalid node type in sail!")))))
+	       
+    (let* ((string (if (stringp string-or-stream) 
+		       string-or-stream
+		       (slurp-stream-string-stream2 string-or-stream)))
+	   (fake-root (stp:first-child
+		       (stp:root
+			(cxml:parse (format nil "<sail-root xmlns:sails='http://iodb.org/sails'>~A</sail-root>" string)
+				    (stp:make-builder))))))
+      (remove-if #'stringp (stp:map-children 'list #'process-stp-node fake-root)))))
 
 (defun xml-to-sail-element (xml-elem &key first-element? last-element?)
   (labels ((attrib-equal (sym1 sym2)	     (equalp (string sym1) (string sym2)))
@@ -174,7 +172,8 @@
 	     (cdr (assoc name (element-attributes xml-elem) :test #'attrib-equal))))
     (let ((field-name (or (attrib-value 'field-name)
 			  (attrib-value 'field)))
-	  (insertion-location (attrib-value 'insertion-location)))
+	  (insertion-position (attrib-value 'insertion-position)))
+      (declare (ignore insertion-position))
       (make-instance 'sail-element
 		     :name (element-name xml-elem)
 		     :field field-name
@@ -187,7 +186,7 @@
 				      (or (attrib-equal 'field-name attr)
 					  (attrib-equal 'field attr)
 					  (attrib-equal 'id attr)
-					  (attrib-equal 'insertion-location attr)
+					  (attrib-equal 'insertion-position attr)
 					  )))
 				(element-attributes xml-elem))
 		     :child-nodes
@@ -265,14 +264,11 @@ the HTML of the sail to a page."
              (element-attributes elem))
      (dolist (child (element-child-nodes elem)) (display-xml-element child)))))
 
+
 (defun example (&optional (test-number 1))
   (with-open-file (stream (format nil "./lisp-tests/sail-0~A.html" test-number))
-    (handler-bind
-        ((s-xml:unmatched-namespace-error
-          #'(lambda (err)
-              (invoke-restart 's-xml::use-package *package* ))))
-      (sail-stream-to-paren-html-generator
-       stream (intern (format nil "EXAMPLE-SAIL-~A" test-number))))))
+    (sail-stream-to-paren-html-generator
+     stream (intern (format nil "EXAMPLE-SAIL-~A" test-number)))))
 
 
 (defpsmacro defsail (sail-name &optional superclasses class-slots &rest options)
@@ -350,7 +346,8 @@ DOM element denoted by field FIELD_NAME with handler function described by
 (defpsmacro setf-field ((sail &key (escape? t)) &body place-value-plist)
   "(setf-field (sail &key escape?) [ field | (field slot*)     value]+"
   (with-ps-gensyms (sail-var escape-var)
-    `(let ((,sail-var ,sail))
+    `(let ((,sail-var ,sail)
+	   (,escape-var ,escape?))
        (setf ,@(loop :for (field value) :on place-value-plist :by #'cddr
 		     :collect `(slot-value (sail-field ,sail-var ,field) 'js-global::inner-h-t-m-l)
-		     :collect (if escape? `(escape-html ,value) value))))))
+		     :collect `(if ,escape-var (escape-html ,value) value))))))
