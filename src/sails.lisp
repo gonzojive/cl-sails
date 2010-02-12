@@ -56,17 +56,18 @@
                       (and (element-first? sails-elem)
                            "first")))
            (id-expr
-            (when field
-              `(,gen-id-function
-                ,view-variable
-                ,field
-                (create
-                 ,@(when (element-first? sails-elem)
-                         (list :first (element-first? sails-elem)))
-                 ,@(when (element-last? sails-elem)
-                         (list :last (element-last? sails-elem)))
-                 ,@(when (element-explicit-id sails-elem)
-                     (list :id (element-explicit-id sails-elem))))))))
+            (if field
+		`(,gen-id-function
+		  ,view-variable
+		  ,field
+		  (create
+		   ,@(when (element-first? sails-elem)
+		       (list :first (element-first? sails-elem)))
+		   ,@(when (element-last? sails-elem)
+		       (list :last (element-last? sails-elem)))
+		   ,@(when (element-explicit-id sails-elem)
+		       (list :id (element-explicit-id sails-elem)))))
+		(element-explicit-id sails-elem))))
       (when id-expr
 ;                 (list (cons 'id "GENERATED-NONSENSE")))
         (list (cons "id" id-expr))))))
@@ -120,6 +121,15 @@
 ;		   (cons y x)))
 ;	   original-arguments
 ;	   :initial-value nil)))
+
+(defun slurp-stream-string-stream2 (stream)
+  "Return the contents of file as a string."
+  (declare (type stream stream)
+	   (optimize (speed 3)))
+  (with-output-to-string (out)
+    (do ((x (read-char stream nil stream) (read-char stream nil stream)))
+        ((eq x stream))
+      (write-char x out))))
 
 (defun parse-xml (string-or-stream)
   ;; create an artificial root in case it is a forest

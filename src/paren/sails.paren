@@ -20,15 +20,15 @@
 
 (defmethod saildoc-onload ((saildoc sails-document))
   (let ((the-html (+ "<style type=\"text/css\">"
-		     (saildoc-css saildoc)
+		     (escape-html (saildoc-css saildoc))
 		     "</style>")))
-    (elem-insert (slot-value js-global:document 'js-global::head)
+    (elem-insert (elt (methcall 'js-global::get-elements-by-tag-name js-global:document "head") 0)
 		 the-html
 		 :bottom)))
 
 (register-dom-event-handler js-global:document
-			    "load"
-			    (lambda (ev) (saildoc-onload *sails-document*)))
+			    "domready"
+			    (lambda (ev) (pslog "loaded.") (saildoc-onload *sails-document*)))
 
 (defun append-sail-css (css-string)
   "Given a string (of CSS), appends the given CSS to the CSS that needs to be applied
