@@ -1,6 +1,6 @@
 (defpackage org.iodb.cl-sails
   (:nicknames :cl-sails :sails)
-  (:use :common-lisp :parenscript :paren-util :paren-events)
+  (:use :common-lisp :parenscript :paren-util :paren-events :paren-psos)
   (:export
    #:standard-sail
    #:sail-stream-to-paren-html-generator
@@ -21,6 +21,7 @@
    #:sail-field
    #:sail-supersail
    #:remove-from-supersail
+   #:remove-dom-nodes
    #:add-subsail
    #:establish-group
    #:generate-html

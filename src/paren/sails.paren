@@ -100,11 +100,14 @@ HTML string as its only argument and purportedly writes HTML to a document."))
     (setf (slot-value sail 'sub name) group)
     (return group)))
 
-(defmethod remove-from-supersail ((sail standard-sail))
-  ;; 1. remove all of the DOM nodes from the document
+(defmethod remove-dom-nodes ((sail standard-sail))
   (let ((root-elems (sail-root-elements sail)))
     (dolist (elem root-elems)
-      (remove-elem elem)))
+      (remove-elem elem))))
+
+(defmethod remove-from-supersail ((sail standard-sail))
+  ;; 1. remove all of the DOM nodes from the document
+  (remove-dom-nodes)
   ;; 2. remove ourselves from the parent subsails
   (remove-from-array (slot-value (sail-supersail sail)
 				 'sub
