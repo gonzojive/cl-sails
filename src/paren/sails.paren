@@ -107,7 +107,7 @@ HTML string as its only argument and purportedly writes HTML to a document."))
 
 (defmethod remove-from-supersail ((sail standard-sail))
   ;; 1. remove all of the DOM nodes from the document
-  (remove-dom-nodes)
+  (remove-dom-nodes sail)
   ;; 2. remove ourselves from the parent subsails
   (remove-from-array (slot-value (sail-supersail sail)
 				 'sub
