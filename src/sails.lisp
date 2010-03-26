@@ -350,4 +350,4 @@ DOM element denoted by field FIELD_NAME with handler function described by
 	   (,escape-var ,escape?))
        (setf ,@(loop :for (field value) :on place-value-plist :by #'cddr
 		     :collect `(slot-value (sail-field ,sail-var ,field) 'js-global::inner-h-t-m-l)
-		     :collect `(if ,escape-var (escape-html ,value) value))))))
+		     :collect `(if ,escape-var (escape-html ,value) ,value))))))
