@@ -6,7 +6,7 @@
    #:sail-stream-to-paren-html-generator
    #:sail-stream-to-paren-expression
    #:generate-sail-definition
-   
+
    ;;; symbols from the Parenscript side
    #:defsail
    #:setf-field
@@ -17,6 +17,7 @@
    #:dom-inspired-event
    #:sail-inspired-event
    #:register-sail-event-handlers
+   #:*sails-document*
    ;; functions
    #:sail-field
    #:sail-supersail

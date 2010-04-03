@@ -19,12 +19,24 @@
   (:documentation "For stuff."))
 
 (defmethod saildoc-onload ((saildoc sails-document))
-  (let ((the-html (+ "<style type=\"text/css\">"
-		     (escape-html (saildoc-css saildoc))
-		     "</style>")))
-    (elem-insert (elt (methcall 'js-global::get-elements-by-tag-name js-global:document "head") 0)
-		 the-html
-		 :bottom)))
+  (let* ((ss (methcall 'js-global::create-element js-global::document "style"))
+         (css (escape-html (saildoc-css saildoc)))
+         (head-elem (elt (methcall 'js-global::get-elements-by-tag-name js-global:document "head") 0)))
+    (methcall 'js-global::set-attribute ss "text/css")
+    
+    (methcall 'js-global::append-child head-elem ss)
+    (if (slot-value ss 'js-global::style-sheet)
+        (setf (slot-value ss 'js-global::style-sheet 'js-global::css-text) css)
+        (methcall 'js-global::append-child ss
+                  (methcall 'js-global::create-text-node js-global::document css)))))
+
+;
+;  (let ((the-html (+ "<style type=\"text/css\">"
+;		     (escape-html (saildoc-css saildoc))
+;		     "</style>")))
+;    (elem-insert (elt (methcall 'js-global::get-elements-by-tag-name js-global:document "head") 0)
+;		 the-html
+;		 :bottom)))
 
 (register-dom-event-handler js-global:document
 			    "domready"
