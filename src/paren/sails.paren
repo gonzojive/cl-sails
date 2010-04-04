@@ -20,15 +20,19 @@
 
 (defmethod saildoc-onload ((saildoc sails-document))
   (let* ((ss (methcall 'js-global::create-element js-global::document "style"))
-         (css (escape-html (saildoc-css saildoc)))
+         (css (saildoc-css saildoc))
          (head-elem (elt (methcall 'js-global::get-elements-by-tag-name js-global:document "head") 0)))
-    (methcall 'js-global::set-attribute ss "text/css")
+    (methcall 'js-global::set-attribute ss "type" "text/css")
     
-    (methcall 'js-global::append-child head-elem ss)
     (if (slot-value ss 'js-global::style-sheet)
-        (setf (slot-value ss 'js-global::style-sheet 'js-global::css-text) css)
-        (methcall 'js-global::append-child ss
-                  (methcall 'js-global::create-text-node js-global::document css)))))
+        (progn
+          (log "IE")
+          (setf (slot-value ss 'js-global::style-sheet 'js-global::css-text) css))
+        (progn
+          (pslog "appending css: %s" css)
+          (methcall 'js-global::append-child ss
+                    (methcall 'js-global::create-text-node js-global::document css))))
+    (methcall 'js-global::append-child head-elem ss)))
 
 ;
 ;  (let ((the-html (+ "<style type=\"text/css\">"
