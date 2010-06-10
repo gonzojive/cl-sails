@@ -26,10 +26,8 @@
     
     (if (slot-value ss 'js-global::style-sheet)
         (progn
-          (log "IE")
           (setf (slot-value ss 'js-global::style-sheet 'js-global::css-text) css))
         (progn
-          (pslog "appending css: %s" css)
           (methcall 'js-global::append-child ss
                     (methcall 'js-global::create-text-node js-global::document css))))
     (methcall 'js-global::append-child head-elem ss)))
@@ -44,7 +42,7 @@
 
 (register-dom-event-handler js-global:document
 			    "domready"
-			    (lambda (ev) (pslog "loaded.") (saildoc-onload *sails-document*)))
+			    (lambda (ev) (pslog "loaded sails.") (saildoc-onload *sails-document*)))
 
 (defun append-sail-css (css-string)
   "Given a string (of CSS), appends the given CSS to the CSS that needs to be applied
