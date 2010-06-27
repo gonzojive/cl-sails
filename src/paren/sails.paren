@@ -53,6 +53,9 @@ when the page loads."
 (defclass standard-sail ()
   ((view :initarg :view :accessor sail-view)
    (sub :initarg :sub :accessor sail-sub)
+   (fieldmap :initarg :fields :initform nil :accessor sail-fieldmap
+             :documentation "Used to fill in the fields of a sail at
+             fill-in-content-time initargs")
    (supersail :initarg :supersail :accessor sail-supersail)
    (supersail-group :initarg :supersail-group :accessor sail-supersail-group))
   (:documentation "This is the superclass of all sails."))
@@ -203,14 +206,20 @@ HTML string as its only argument and purportedly writes HTML to a document."))
 ;  (paren-psos::log "Fill sail with content.")
   (let ((initarg-map (class-initarg-map (class-of sail))))
 
-;    (paren-psos::log (slot-value sail 'view 'dom-info))
+;    (pslog (slot-value sail 'view 'dom-info))
 
-    (for-in (field-name (slot-value sail 'view 'dom-info))
-	    (let* ((prop (slot-value initarg-map field-name))
-		   (val (when prop (slot-value sail prop))))
-;	      (log (+ "Field : " field-name ", Prop: " prop ", Value: " val))
-	      (when val (setf (slot-value sail 'view 'dom field-name :inner-h-t-m-l)
-			      val))))))
+    (let ((fieldmap (slot-value sail 'fieldmap)))
+      (when fieldmap
+        (for-in (field-name fieldmap)
+          (let ((val (slot-value fieldmap field-name)))
+            (when val
+              (cond
+                ((or (arrayp val)
+                     (paren-psos::is-subclass-of (class-of val) standard-sail))
+                     (add-subsail sail val :group field-name))
+                (t
+                 (setf-field (sail)
+                             field-name val))))))))))
 
 (defun set-field-inner-html (sail field-name html-contents)
   "Sets the HTML of the field named by FIELD-NAME in an instance of a sail."
