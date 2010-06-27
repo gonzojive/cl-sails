@@ -214,9 +214,11 @@ HTML string as its only argument and purportedly writes HTML to a document."))
           (let ((val (slot-value fieldmap field-name)))
             (when val
               (cond
-                ((or (arrayp val)
-                     (paren-psos::is-subclass-of (class-of val) standard-sail))
-                     (add-subsail sail val :group field-name))
+                ((paren-psos::is-subclass-of standard-sail (class-of val))
+                 (add-subsail sail val :group field-name))
+                ((arrayp val)
+                 (dolist (subsail val)
+                   (add-subsail sail subsail :group field-name)))
                 (t
                  (setf-field (sail)
                              field-name val))))))))))
