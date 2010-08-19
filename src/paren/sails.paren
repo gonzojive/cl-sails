@@ -15,11 +15,13 @@
 
 (defclass sails-document (event-emitter)
   ((focus :accessor saildoc-focus :initform nil)
-   (all-sail-css :accessor saildoc-css :initform ""))
+   (all-sail-css :accessor saildoc-css :initform "")
+   (loadedp :accessor saildoc-loadedp :initform nil))
   (:documentation "For stuff."))
 
-(defmethod saildoc-onload ((saildoc sails-document))
-  (let* ((ss (methcall 'js-global::create-element js-global::document "style"))
+(defun saildoc-apply-css (saildoc)
+  (let* ((ss (or (@ saildoc 'ss)
+                 (methcall 'js-global::create-element js-global::document "style")))
          (css (saildoc-css saildoc))
          (head-elem (elt (methcall 'js-global::get-elements-by-tag-name js-global:document "head") 0)))
     (methcall 'js-global::set-attribute ss "type" "text/css")
@@ -30,25 +32,34 @@
         (progn
           (methcall 'js-global::append-child ss
                     (methcall 'js-global::create-text-node js-global::document css))))
-    (methcall 'js-global::append-child head-elem ss)))
 
-;
-;  (let ((the-html (+ "<style type=\"text/css\">"
-;		     (escape-html (saildoc-css saildoc))
-;		     "</style>")))
-;    (elem-insert (elt (methcall 'js-global::get-elements-by-tag-name js-global:document "head") 0)
-;		 the-html
-;		 :bottom)))
+    (methcall 'js-global::append-child head-elem ss)
+    (setf (@ saildoc 'ss) ss)))
+
+(defmethod saildoc-onload ((saildoc sails-document))
+  (setf (saildoc-loadedp saildoc) t)
+  ;; append all the CSS for all the defail forms
+  (saildoc-apply-css saildoc))
 
 (register-dom-event-handler js-global:document
 			    "domready"
-			    (lambda (ev) (pslog "loaded sails.") (saildoc-onload *sails-document*)))
+			    (lambda (ev) 
+                              #+nil
+                              (pslog "loaded sails.")
+                              (saildoc-onload *sails-document*)))
 
 (defun append-sail-css (css-string)
   "Given a string (of CSS), appends the given CSS to the CSS that needs to be applied
 when the page loads."
   (setf (saildoc-css *sails-document*)
-	(+ (saildoc-css *sails-document*) css-string)))
+	(+ (saildoc-css *sails-document*) "
+" css-string))
+  ;; css will be added to document automatically onload.  but if that
+  ;; has already happened re-apply the CSS
+  (when (saildoc-loadedp *sails-document*)
+    (saildoc-apply-css *sails-document*))
+
+  (return (saildoc-css *sails-document*)))
 
 (defclass standard-sail ()
   ((view :initarg :view :accessor sail-view)
@@ -106,7 +117,14 @@ HTML string as its only argument and purportedly writes HTML to a document."))
 (defmethod post-render ((sail standard-sail)))
 
 (defun insert-by-group-name (sail group-name raw-html)
-  (elem-insert (slot-value sail 'view 'dom group-name) raw-html :top))
+  (let ((group-obj (slot-value sail 'view 'dom group-name)))
+    (unless group-obj
+      (pslog (:error "Sail %o does not have field named %s") sail group-name)
+      #+nil
+      (throw (+ "Sail does not have a group named " group-name)))
+    (elem-insert group-obj raw-html :top)))
+
+
 ;  (new (global::-insertion.-top (slot-value sail 'view 'dom group-name) raw-html)))
 ;  (new (global::-insertion.-top (slot-value sail 'view 'dom group-name) raw-html)))
 ;  (let ((group-elem (slot-value sail.view.dom group-name)))
@@ -158,14 +176,14 @@ HTML string as its only argument and purportedly writes HTML to a document."))
 	      0
 	      subsail)
     (when (slot-value group 'sorter)
-      (methcall :sort group (slot-value group 'sorter)))
+      (methcall 'jsns::sort group (slot-value group 'sorter)))
 
     ;; insert the html as appropriate depending on where in the group it is being added
-    (let ((insert-index (methcall :index-of group subsail))
+    (let ((insert-index (methcall 'jsns::index-of group subsail))
 	  (html-writer nil))
 ;      (log (+ "Insert index: " insert-index " vs. group length: " (length group)))
       (cond
-	((== (slot-value group :length) 1)
+	((== (slot-value group 'jsns::length) 1)
 	 (setf html-writer
 	       (lambda (raw-html)
 		 (insert-by-group-name parent-sail group-name raw-html))))
@@ -226,7 +244,7 @@ HTML string as its only argument and purportedly writes HTML to a document."))
 (defun set-field-inner-html (sail field-name html-contents)
   "Sets the HTML of the field named by FIELD-NAME in an instance of a sail."
 ;  (paren-psos::log (+ "set-field-inner-html Field : " field-name " DOM: " (slot-value sail 'view 'dom field-name) ", Value: " html-contents))
-  (setf (slot-value sail 'view 'dom field-name :inner-h-t-m-l) html-contents))
+  (setf (slot-value sail 'view 'dom field-name 'jsns::inner-h-t-m-l) html-contents))
 
 (defun sail-last-node (view) 
   (return (slot-value view 'last)))
@@ -238,9 +256,11 @@ HTML string as its only argument and purportedly writes HTML to a document."))
   (let ((rv (create)))
     (for-in (field-name (slot-value view 'dom-info))
       (let* ((info (slot-value view 'dom-info field-name))
-	     (elem (methcall :get-element-by-id doc (slot-value info 'id)))
+	     (elem (methcall 'jsns::get-element-by-id doc (slot-value info 'id)))
 	     (first? (slot-value info 'first))
 	     (last? (slot-value info 'last)))
+        (unless elem
+          (pslog (:error "Sail %o failed to locate its domnode %o") view field-name))
         (setf (slot-value rv field-name) elem)
         (when first? (setf (slot-value view 'first) elem))
         (when last? (setf (slot-value view 'last) elem))))
@@ -273,10 +293,10 @@ about that field.  We may rethink this when sail generation is integrated with t
   "Returns an array of DOM nodes between two nodes, including each of them."
   (let ((rv (array node1)))
     (while (!= node1 node2)
-      (let ((next-node (slot-value node1 :next-sibling)))
+      (let ((next-node (slot-value node1 'jsns::next-sibling)))
 	(when (== nil next-node)
 	  (break))
-	(methcall :push rv next-node)
+	(methcall 'jsns::push rv next-node)
 	(setf node1 next-node)))
     (return rv)))
 
@@ -285,13 +305,13 @@ about that field.  We may rethink this when sail generation is integrated with t
 	(first (sail-first-node (slot-value sail 'view)))
 	(last (sail-last-node (slot-value sail 'view))))
     (dolist (sibling (sibling-nodes-between first last))
-      (when (== 1 (slot-value sibling :node-type))
+      (when (== 1 (slot-value sibling 'jsns::node-type))
 	(methcall :push res sibling)))
     (return res)))
 
 (defmethod make-sail-visible ((sail standard-sail))
   (dolist (sibling-node (sail-root-elements sail))
-    (setf (slot-value sibling-node :style :visibility) "visible")))
+    (setf (slot-value sibling-node 'jsns::style 'jsns::visibility) "visible")))
 
 (defmethod hide-sail ((sail standard-sail))
   (dolist (sibling-node (sail-root-elements sail))
@@ -302,7 +322,12 @@ about that field.  We may rethink this when sail generation is integrated with t
     (elem-show sibling-node)))
 
 (defmethod sail-field ((sail standard-sail) field-name)
-  (return (slot-value sail 'view 'dom field-name)))
+  (let ((elem (slot-value sail 'view 'dom field-name)))
+    (unless elem
+      (pslog (:error "Sail %o does not have field named %s") sail field-name)
+      #+nil
+      (throw (+ "Sail does not have field named " field-name)))
+    (return elem)))
 
 (defmethod sail-subsails ((sail standard-sail) &optional (group-name "children"))
   (return (copy-array (or (slot-value sail 'sub group-name) (array)))))
