@@ -324,6 +324,7 @@ about that field.  We may rethink this when sail generation is integrated with t
 (defmethod sail-field ((sail standard-sail) field-name)
   (let ((elem (slot-value sail 'view 'dom field-name)))
     (unless elem
+      #+nil
       (pslog (:error "Sail %o does not have field named %s") sail field-name)
       #+nil
       (throw (+ "Sail does not have field named " field-name)))
